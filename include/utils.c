@@ -4,7 +4,11 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <sys/_pthread/_pthread_t.h>
+#include <sys/socket.h>
 #include <unistd.h>
+
+struct AcceptedSocket acceptedSockets[10];
+int acceptedSocketsIndex = 0;
 
 int CreateTCPIpv4Socket() {
 	return socket(AF_INET, SOCK_STREAM, 0);
@@ -48,6 +52,12 @@ struct AcceptedSocket *acceptIncomingConnection(int serverSocketFD) {
 }
 
 void receivedConnectionsThreadedPrints(struct AcceptedSocket *clientSocket) {
+
+	// Basically were creating a thread for every accepted client. Each thread
+	// will run the receiveAndPrintIncomingData funciton to print the incoming
+	// message. We will also use the same thread to broadcast the message of
+	// each client to every other client
+
 	pthread_t id;
 	pthread_create(&id, NULL, receiveAndPrintIncomingData, clientSocket);
 }
@@ -56,7 +66,21 @@ void threadedDataPrinting(int serverSocketFD) {
 	while (true) {
 		struct AcceptedSocket *clientSocket =
 			acceptIncomingConnection(serverSocketFD);
+
+		acceptedSockets[acceptedSocketsIndex++] = *clientSocket;
+
 		receivedConnectionsThreadedPrints(clientSocket);
+	}
+}
+
+void broadcastIncomingMessage(char *buffer, int socketFD) {
+	for (int i = 0; i < acceptedSocketsIndex; i++) {
+		if (acceptedSockets[i].acceptedSocketFD == socketFD) {
+			continue;
+		} else {
+			send(acceptedSockets[i].acceptedSocketFD, buffer, strlen(buffer),
+				 0);
+		}
 	}
 }
 
@@ -72,6 +96,8 @@ void *receiveAndPrintIncomingData(void *arg) {
 		if (amountReceived > 0) {
 			buffer[amountReceived] = 0;
 			printf("Response is %s", buffer);
+
+			broadcastIncomingMessage(buffer, clientSocket->acceptedSocketFD);
 		} else if (amountReceived <= 0) {
 			printf("We will break");
 			break;

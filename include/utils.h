@@ -31,4 +31,6 @@ void threadedDataPrinting(int serverSocketFD);
 
 void receivedConnectionsThreadedPrints(struct AcceptedSocket *clientSocket);
 
+void broadcastIncomingMessage(char *buffer, int socketFD);
+
 #endif
