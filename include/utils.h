@@ -5,6 +5,7 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +19,14 @@ struct AcceptedSocket {
 	int error;
 	bool connectionAcceptedFully;
 };
+
+struct AcceptedSocketNode {
+	struct AcceptedSocket *data;
+	struct AcceptedSocketNode *next;
+};
+
+struct AcceptedSocketNode *insertAcceptedClient(struct AcceptedSocketNode *head,
+												struct AcceptedSocket *client);
 
 int CreateTCPIpv4Socket();
 

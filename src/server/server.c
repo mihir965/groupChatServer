@@ -30,6 +30,9 @@ int main() {
 	// that we created in the client.c. Both these file descritors are the same
 	// and will allow us to write to and from it.
 
+	struct AcceptedSocketNode *head = NULL;
+	unsigned socket_size = sizeof(struct AcceptedSocket);
+
 	threadedDataPrinting(serverSocketFD);
 
 	shutdown(serverSocketFD, SHUT_RDWR);

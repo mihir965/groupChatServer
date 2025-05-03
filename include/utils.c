@@ -2,13 +2,28 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/_pthread/_pthread_t.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
-struct AcceptedSocket acceptedSockets[10];
-int acceptedSocketsIndex = 0;
+// struct AcceptedSocket acceptedSockets[10];
+// int acceptedSocketsIndex = 0;
+
+struct AcceptedSocketNode *insertAcceptedClient(struct AcceptedSocketNode *head,
+												struct AcceptedSocket *client) {
+	struct AcceptedSocketNode *newClient =
+		(struct AcceptedSocketNode *)malloc(sizeof(struct AcceptedSocketNode));
+
+	newClient->data = malloc(sizeof(struct AcceptedSocket));
+	newClient->next = head;
+
+	memcpy(newClient->data, client, sizeof(struct AcceptedSocket));
+
+	return newClient;
+}
 
 int CreateTCPIpv4Socket() {
 	return socket(AF_INET, SOCK_STREAM, 0);
@@ -62,25 +77,30 @@ void receivedConnectionsThreadedPrints(struct AcceptedSocket *clientSocket) {
 	pthread_create(&id, NULL, receiveAndPrintIncomingData, clientSocket);
 }
 
+struct AcceptedSocketNode *head = NULL;
+unsigned socket_size = sizeof(struct AcceptedSocket);
+
 void threadedDataPrinting(int serverSocketFD) {
 	while (true) {
 		struct AcceptedSocket *clientSocket =
 			acceptIncomingConnection(serverSocketFD);
 
-		acceptedSockets[acceptedSocketsIndex++] = *clientSocket;
+		// acceptedSockets[acceptedSocketsIndex++] = *clientSocket;
 
+		head = insertAcceptedClient(head, clientSocket);
 		receivedConnectionsThreadedPrints(clientSocket);
 	}
 }
 
 void broadcastIncomingMessage(char *buffer, int socketFD) {
-	for (int i = 0; i < acceptedSocketsIndex; i++) {
-		if (acceptedSockets[i].acceptedSocketFD == socketFD) {
+	struct AcceptedSocketNode *temp = head;
+	while (temp != NULL) {
+		if (temp->data->acceptedSocketFD == socketFD)
 			continue;
-		} else {
-			send(acceptedSockets[i].acceptedSocketFD, buffer, strlen(buffer),
-				 0);
+		else {
+			send(temp->data->acceptedSocketFD, buffer, strlen(buffer), 0);
 		}
+		temp = temp->next;
 	}
 }
 
