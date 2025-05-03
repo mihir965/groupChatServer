@@ -19,9 +19,9 @@ int main() {
 	}
 
 	int listenResult = listen(
-		serverSocketFD, 10); // Queues all the connections that are coming to
-							 // the serverSocketFD. We are allowing 10 such
-							 // connections before the next functions are run
+		serverSocketFD, 500); // Queues all the connections that are coming to
+							  // the serverSocketFD. We are allowing 10 such
+							  // connections before the next functions are run
 	// The second parameter in the listen function is basically called the
 	// backlog, which is the number of connection requests the OS will queue for
 	// the socekt.
@@ -29,9 +29,6 @@ int main() {
 	// Now we want to get the client socket file descriptor, basicallyt the ont
 	// that we created in the client.c. Both these file descritors are the same
 	// and will allow us to write to and from it.
-
-	struct AcceptedSocketNode *head = NULL;
-	unsigned socket_size = sizeof(struct AcceptedSocket);
 
 	threadedDataPrinting(serverSocketFD);
 
