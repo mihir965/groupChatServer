@@ -3,12 +3,44 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/_pthread/_pthread_t.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
-struct AcceptedSocket acceptedSockets[10];
-int acceptedSocketsIndex = 0;
+struct AcceptedSocketNode *insertAcceptedClient(struct AcceptedSocketNode *head,
+												struct AcceptedSocket *client) {
+	struct AcceptedSocketNode *newClient =
+		(struct AcceptedSocketNode *)malloc(sizeof(struct AcceptedSocketNode));
+
+	newClient->data = malloc(sizeof(struct AcceptedSocket));
+	newClient->next = head;
+
+	memcpy(newClient->data, client, sizeof(struct AcceptedSocket));
+
+	return newClient;
+}
+
+struct AcceptedSocketNode *removeClient(struct AcceptedSocketNode *head,
+										int socket_fd) {
+	struct AcceptedSocketNode *cur = head;
+	struct AcceptedSocketNode *prev = NULL;
+	while (cur) {
+		if (cur->data->acceptedSocketFD == socket_fd) {
+			if (prev) {
+				prev->next = cur->next;
+			} else {
+				head = cur->next;
+			}
+			free(cur->data);
+			free(cur);
+			break;
+		}
+		prev = cur;
+		cur = cur->next;
+	}
+	return head;
+}
 
 int CreateTCPIpv4Socket() {
 	return socket(AF_INET, SOCK_STREAM, 0);
@@ -62,25 +94,25 @@ void receivedConnectionsThreadedPrints(struct AcceptedSocket *clientSocket) {
 	pthread_create(&id, NULL, receiveAndPrintIncomingData, clientSocket);
 }
 
+struct AcceptedSocketNode *head = NULL;
+unsigned socket_size = sizeof(struct AcceptedSocket);
+
 void threadedDataPrinting(int serverSocketFD) {
 	while (true) {
 		struct AcceptedSocket *clientSocket =
 			acceptIncomingConnection(serverSocketFD);
 
-		acceptedSockets[acceptedSocketsIndex++] = *clientSocket;
+		head = insertAcceptedClient(head, clientSocket);
 
 		receivedConnectionsThreadedPrints(clientSocket);
 	}
 }
 
 void broadcastIncomingMessage(char *buffer, int socketFD) {
-	for (int i = 0; i < acceptedSocketsIndex; i++) {
-		if (acceptedSockets[i].acceptedSocketFD == socketFD) {
-			continue;
-		} else {
-			send(acceptedSockets[i].acceptedSocketFD, buffer, strlen(buffer),
-				 0);
-		}
+	struct AcceptedSocketNode *temp = head;
+	while (temp != NULL) {
+		send(temp->data->acceptedSocketFD, buffer, strlen(buffer), 0);
+		temp = temp->next;
 	}
 }
 

@@ -19,6 +19,17 @@ struct AcceptedSocket {
 	bool connectionAcceptedFully;
 };
 
+struct AcceptedSocketNode {
+	struct AcceptedSocket *data;
+	struct AcceptedSocketNode *next;
+};
+
+struct AcceptedSocketNode *insertAcceptedClient(struct AcceptedSocketNode *head,
+												struct AcceptedSocket *client);
+
+struct AcceptedSocketNode *removeClient(struct AcceptedSocketNode *head,
+										int socket_fd);
+
 int CreateTCPIpv4Socket();
 
 struct sockaddr_in *CreateIPv4Address(char *ip, int port);
