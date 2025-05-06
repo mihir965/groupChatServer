@@ -5,12 +5,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/_pthread/_pthread_t.h>
+#include <sys/_types/_ssize_t.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <unistd.h>
-
-// struct AcceptedSocket acceptedSockets[10];
-// int acceptedSocketsIndex = 0;
 
 struct AcceptedSocketNode *insertAcceptedClient(struct AcceptedSocketNode *head,
 												struct AcceptedSocket *client) {
@@ -23,6 +21,27 @@ struct AcceptedSocketNode *insertAcceptedClient(struct AcceptedSocketNode *head,
 	memcpy(newClient->data, client, sizeof(struct AcceptedSocket));
 
 	return newClient;
+}
+
+struct AcceptedSocketNode *removeClient(struct AcceptedSocketNode *head,
+										int socket_fd) {
+	struct AcceptedSocketNode *cur = head;
+	struct AcceptedSocketNode *prev = NULL;
+	while (cur) {
+		if (cur->data->acceptedSocketFD == socket_fd) {
+			if (prev) {
+				prev->next = cur->next;
+			} else {
+				head = cur->next;
+			}
+			free(cur->data);
+			free(cur);
+			break;
+		}
+		prev = cur;
+		cur = cur->next;
+	}
+	return head;
 }
 
 int CreateTCPIpv4Socket() {
@@ -66,63 +85,61 @@ struct AcceptedSocket *acceptIncomingConnection(int serverSocketFD) {
 	return acceptedSocket;
 }
 
-void receivedConnectionsThreadedPrints(struct AcceptedSocket *clientSocket) {
-
-	// Basically were creating a thread for every accepted client. Each thread
-	// will run the receiveAndPrintIncomingData funciton to print the incoming
-	// message. We will also use the same thread to broadcast the message of
-	// each client to every other client
-
-	pthread_t id;
-	pthread_create(&id, NULL, receiveAndPrintIncomingData, clientSocket);
-}
-
 struct AcceptedSocketNode *head = NULL;
 unsigned socket_size = sizeof(struct AcceptedSocket);
 
 void threadedDataPrinting(int serverSocketFD) {
+	fd_set current_sockets, ready_sockets;
+	FD_ZERO(&current_sockets);
+	FD_SET(serverSocketFD, &current_sockets); // We add the serverSocketFD to
+											  // the current_sockets fd_set
+	int maxfd = serverSocketFD;
 	while (true) {
-		struct AcceptedSocket *clientSocket =
-			acceptIncomingConnection(serverSocketFD);
+		ready_sockets = current_sockets;
+		if (select(maxfd + 1, &ready_sockets, NULL, NULL, NULL) < 0) {
+			perror("Select Error");
+			exit(EXIT_FAILURE);
+		}
 
-		// acceptedSockets[acceptedSocketsIndex++] = *clientSocket;
-
-		head = insertAcceptedClient(head, clientSocket);
-		receivedConnectionsThreadedPrints(clientSocket);
+		for (int i = 0; i <= maxfd; i++) {
+			if (!FD_ISSET(i, &ready_sockets))
+				continue;
+			if (i == serverSocketFD) {
+				struct AcceptedSocket *clientSocket =
+					acceptIncomingConnection(serverSocketFD);
+				if (clientSocket->acceptedSocketFD >= 0) {
+					FD_SET(clientSocket->acceptedSocketFD, &current_sockets);
+					if (clientSocket->acceptedSocketFD > maxfd)
+						maxfd = clientSocket->acceptedSocketFD;
+					head = insertAcceptedClient(head, clientSocket);
+				}
+				free(clientSocket);
+			} else {
+				char buffer[4096];
+				ssize_t amountReceived = recv(i, buffer, sizeof(buffer) - 1, 0);
+				if (amountReceived > 0) {
+					buffer[amountReceived] = 0;
+					printf("Response is %s\n", buffer);
+					broadcastIncomingMessage(buffer, i);
+				} else if (amountReceived <= 0) {
+					close(i);
+					FD_CLR(i, &current_sockets);
+					head = removeClient(head, i);
+				}
+			}
+		}
 	}
 }
 
 void broadcastIncomingMessage(char *buffer, int socketFD) {
 	struct AcceptedSocketNode *temp = head;
 	while (temp != NULL) {
-		if (temp->data->acceptedSocketFD == socketFD)
+		if (temp->data->acceptedSocketFD == socketFD) {
+			temp = temp->next;
 			continue;
-		else {
+		} else {
 			send(temp->data->acceptedSocketFD, buffer, strlen(buffer), 0);
 		}
 		temp = temp->next;
 	}
-}
-
-void *receiveAndPrintIncomingData(void *arg) {
-	struct AcceptedSocket *clientSocket = (struct AcceptedSocket *)arg;
-
-	char buffer[1024];
-
-	while (true) {
-		ssize_t amountReceived =
-			recv(clientSocket->acceptedSocketFD, buffer, 1024, 0);
-
-		if (amountReceived > 0) {
-			buffer[amountReceived] = 0;
-			printf("Response is %s", buffer);
-
-			broadcastIncomingMessage(buffer, clientSocket->acceptedSocketFD);
-		} else if (amountReceived <= 0) {
-			printf("We will break");
-			break;
-		}
-	}
-	close(clientSocket->acceptedSocketFD);
-	return NULL;
 }

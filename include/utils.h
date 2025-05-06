@@ -28,17 +28,21 @@ struct AcceptedSocketNode {
 struct AcceptedSocketNode *insertAcceptedClient(struct AcceptedSocketNode *head,
 												struct AcceptedSocket *client);
 
+struct AcceptedSocketNode *removeClient(struct AcceptedSocketNode *head,
+										int socket_fd);
+
 int CreateTCPIpv4Socket();
 
 struct sockaddr_in *CreateIPv4Address(char *ip, int port);
 
 struct AcceptedSocket *acceptIncomingConnection(int serverSocketFD);
 
-void *receiveAndPrintIncomingData(void *arg);
+// void *receiveAndPrintIncomingData(void *arg);
+void receiveAndPrintIncomingData(int client_socket_fd);
 
 void threadedDataPrinting(int serverSocketFD);
 
-void receivedConnectionsThreadedPrints(struct AcceptedSocket *clientSocket);
+void receivedConnectionsThreadedPrints(int client_socket_fd);
 
 void broadcastIncomingMessage(char *buffer, int socketFD);
 
