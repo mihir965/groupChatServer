@@ -2,8 +2,6 @@
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include <sys/_types/_socklen_t.h>
-#include <sys/_types/_ssize_t.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
