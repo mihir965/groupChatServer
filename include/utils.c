@@ -2,6 +2,7 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +10,78 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <unistd.h>
+
+struct JobQueue {
+	Job **ring;
+	size_t cap, head, tail, count;
+	bool shutting_down;
+	pthread_mutex_t lock;
+	pthread_cond_t not_empty, not_full;
+};
+
+pthread_mutex_t clients_lock = PTHREAD_MUTEX_INITIALIZER;
+
+JobQueue *jq_init(size_t capacity) {
+	JobQueue *q = malloc(sizeof *q);
+	q->ring = calloc(capacity, sizeof(Job *));
+	q->cap = capacity;
+	q->head = q->tail = q->count = 0;
+	q->shutting_down = false;
+	pthread_mutex_init(&q->lock, NULL);
+	pthread_cond_init(&q->not_empty, NULL);
+	pthread_cond_init(&q->not_full, NULL);
+	return q;
+}
+
+void jq_enqueue(JobQueue *q, Job *j) {
+	pthread_mutex_lock(&q->lock);
+	while (q->count == q->cap && !q->shutting_down)
+		pthread_cond_wait(&q->not_full, &q->lock);
+
+	if (!q->shutting_down) {
+		q->ring[q->tail] = j;
+		q->tail = (q->tail + 1) % q->cap;
+		q->count++;
+
+		// Signalling that the queue is not empty
+		pthread_cond_signal(&q->not_empty);
+	}
+
+	pthread_mutex_unlock(&q->lock);
+}
+
+Job *jq_dequeue(JobQueue *q) {
+	pthread_mutex_lock(&q->lock);
+	while (q->count == 0 && !q->shutting_down) {
+		pthread_cond_wait(&q->not_empty, &q->lock);
+	}
+	if (q->count == 0 && q->shutting_down) {
+		pthread_mutex_unlock(&q->lock);
+		return NULL;
+	}
+	Job *j = q->ring[q->head];
+	q->head = (q->head + 1) % q->cap;
+	q->count--;
+	pthread_cond_signal(&q->not_full);
+	pthread_mutex_unlock(&q->lock);
+	return j;
+}
+
+void jq_shutdown(JobQueue *q) {
+	pthread_mutex_lock(&q->lock);
+	q->shutting_down = true;
+	pthread_cond_broadcast(&q->not_empty);
+	pthread_cond_broadcast(&q->not_full);
+	pthread_mutex_unlock(&q->lock);
+}
+
+void jq_destroy(JobQueue *q) {
+	free(q->ring);
+	pthread_mutex_destroy(&q->lock);
+	pthread_cond_destroy(&q->not_empty);
+	pthread_cond_destroy(&q->not_full);
+	free(q);
+}
 
 struct AcceptedSocketNode *insertAcceptedClient(struct AcceptedSocketNode *head,
 												struct AcceptedSocket *client) {
@@ -87,8 +160,52 @@ struct AcceptedSocket *acceptIncomingConnection(int serverSocketFD) {
 
 struct AcceptedSocketNode *head = NULL;
 unsigned socket_size = sizeof(struct AcceptedSocket);
+static JobQueue *g_q = NULL;
+static pthread_t *g_workers = NULL;
+static int g_nw = 0;
+
+static void *worker_fn(void *arg) {
+	JobQueue *q = arg;
+	for (;;) {
+		Job *job = jq_dequeue(q);
+		if (!job)
+			break;
+
+		pthread_mutex_lock(&clients_lock);
+		struct AcceptedSocketNode *c = head;
+		while (c) {
+			int dst = c->data->acceptedSocketFD;
+			if (dst != job->sender_fd)
+				send(dst, job->msg, job->len, 0);
+			c = c->next;
+		}
+		pthread_mutex_unlock(&clients_lock);
+		free(job->msg);
+		free(job);
+	}
+	return NULL;
+}
+
+static void spawn_workers(JobQueue *q, int n) {
+	g_q = q;
+	g_nw = n;
+	g_workers = malloc(sizeof(pthread_t) * n);
+	for (int i = 0; i < n; i++) {
+		pthread_create(&g_workers[i], NULL, worker_fn, q);
+	}
+}
+
+static void join_workers(void) {
+	for (int i = 0; i < g_nw; i++)
+		pthread_join(g_workers[i], NULL);
+	free(g_workers);
+}
 
 void threadedDataPrinting(int serverSocketFD) {
+
+	JobQueue *q = jq_init(256); // capacity 256
+	spawn_workers(q, 4);		// 4 worker threads
+
 	fd_set current_sockets, ready_sockets;
 	FD_ZERO(&current_sockets);
 	FD_SET(serverSocketFD, &current_sockets); // We add the serverSocketFD to
@@ -111,35 +228,47 @@ void threadedDataPrinting(int serverSocketFD) {
 					FD_SET(clientSocket->acceptedSocketFD, &current_sockets);
 					if (clientSocket->acceptedSocketFD > maxfd)
 						maxfd = clientSocket->acceptedSocketFD;
+					pthread_mutex_lock(
+						&clients_lock); // Making sure that shared resources are
+										// not getting race conditions
 					head = insertAcceptedClient(head, clientSocket);
+					pthread_mutex_unlock(&clients_lock);
 				}
 				free(clientSocket);
 			} else {
 				char buffer[4096];
 				ssize_t amountReceived = recv(i, buffer, sizeof(buffer) - 1, 0);
 				if (amountReceived > 0) {
-					buffer[amountReceived] = 0;
-					printf("Response is %s\n", buffer);
-					broadcastIncomingMessage(buffer, i);
-				} else if (amountReceived <= 0) {
+					Job *job = malloc(sizeof *job);
+					job->msg = malloc(amountReceived);
+					memcpy(job->msg, buffer, amountReceived);
+					job->len = (size_t)amountReceived;
+					job->sender_fd = i;
+					jq_enqueue(q, job);
+				} else {
 					close(i);
 					FD_CLR(i, &current_sockets);
+					pthread_mutex_lock(&clients_lock);
 					head = removeClient(head, i);
+					pthread_mutex_unlock(&clients_lock);
 				}
 			}
 		}
 	}
+	jq_shutdown(q);
+	join_workers();
+	jq_destroy(q);
 }
 
-void broadcastIncomingMessage(char *buffer, int socketFD) {
-	struct AcceptedSocketNode *temp = head;
-	while (temp != NULL) {
-		if (temp->data->acceptedSocketFD == socketFD) {
-			temp = temp->next;
-			continue;
-		} else {
-			send(temp->data->acceptedSocketFD, buffer, strlen(buffer), 0);
-		}
-		temp = temp->next;
-	}
-}
+// void broadcastIncomingMessage(char *buffer, int socketFD) {
+// 	struct AcceptedSocketNode *temp = head;
+// 	while (temp != NULL) {
+// 		if (temp->data->acceptedSocketFD == socketFD) {
+// 			temp = temp->next;
+// 			continue;
+// 		} else {
+// 			send(temp->data->acceptedSocketFD, buffer, strlen(buffer), 0);
+// 		}
+// 		temp = temp->next;
+// 	}
+// }

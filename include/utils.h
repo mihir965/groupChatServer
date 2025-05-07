@@ -25,6 +25,22 @@ struct AcceptedSocketNode {
 	struct AcceptedSocketNode *next;
 };
 
+typedef struct {
+	int sender_fd;
+	size_t len;
+	char *msg;
+} Job;
+
+typedef struct JobQueue JobQueue;
+
+JobQueue *jq_init(size_t capacity);
+void jq_enqueue(JobQueue *q, Job *j); // This will block if full
+Job *jq_dequeue(JobQueue *q); // This will block if empty, NULL on shutdown
+void jq_shutdown(JobQueue *q);
+void jq_destroy(JobQueue *q);
+
+extern pthread_mutex_t clients_lock;
+
 struct AcceptedSocketNode *insertAcceptedClient(struct AcceptedSocketNode *head,
 												struct AcceptedSocket *client);
 
