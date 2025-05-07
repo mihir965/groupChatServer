@@ -3,6 +3,7 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/_pthread/_pthread_t.h>
@@ -93,23 +94,27 @@ void receivedConnectionsThreadedPrints(struct AcceptedSocket *clientSocket) {
 
 	pthread_t id;
 	pthread_create(&id, NULL, receiveAndPrintIncomingData, clientSocket);
+	pthread_detach(id);
 }
 
 struct AcceptedSocketNode *head = NULL;
 unsigned socket_size = sizeof(struct AcceptedSocket);
+pthread_mutex_t clients_lock = PTHREAD_MUTEX_INITIALIZER;
 
 void threadedDataPrinting(int serverSocketFD) {
 	while (true) {
 		struct AcceptedSocket *clientSocket =
 			acceptIncomingConnection(serverSocketFD);
-
+		pthread_mutex_lock(&clients_lock);
 		head = insertAcceptedClient(head, clientSocket);
-
+		pthread_mutex_unlock(&clients_lock);
 		receivedConnectionsThreadedPrints(clientSocket);
+		// free(clientSocket);
 	}
 }
 
 void broadcastIncomingMessage(char *buffer, int socketFD) {
+	pthread_mutex_lock(&clients_lock);
 	struct AcceptedSocketNode *temp = head;
 	while (temp != NULL) {
 		if (temp->data->acceptedSocketFD == socketFD) {
@@ -120,6 +125,7 @@ void broadcastIncomingMessage(char *buffer, int socketFD) {
 		}
 		temp = temp->next;
 	}
+	pthread_mutex_unlock(&clients_lock);
 }
 
 void *receiveAndPrintIncomingData(void *arg) {
@@ -131,15 +137,16 @@ void *receiveAndPrintIncomingData(void *arg) {
 		ssize_t amountReceived =
 			recv(clientSocket->acceptedSocketFD, buffer, 1024, 0);
 
-		// bio_read_4k();
+		bio_read_4k();
 
 		if (amountReceived > 0) {
 			buffer[amountReceived] = 0;
 			printf("Response is %s", buffer);
-
 			broadcastIncomingMessage(buffer, clientSocket->acceptedSocketFD);
 		} else if (amountReceived <= 0) {
-			printf("We will break");
+			pthread_mutex_lock(&clients_lock);
+			head = removeClient(head, clientSocket->acceptedSocketFD);
+			pthread_mutex_unlock(&clients_lock);
 			break;
 		}
 	}
