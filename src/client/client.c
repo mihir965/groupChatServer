@@ -5,8 +5,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/_pthread/_pthread_t.h>
-#include <sys/_types/_ssize_t.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
