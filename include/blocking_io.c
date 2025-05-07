@@ -35,6 +35,7 @@ int bio_init(const char *path, size_t bytes) {
 }
 
 void bio_read_4k(void) {
+	printf("Blocking read\n");
 	if (blob_fd < 0 || blob_len == 0)
 		return;
 	off_t off = (rand() % (blob_len / 4096)) * 4096;

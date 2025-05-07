@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "blocking_io.h"
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdbool.h>
@@ -120,6 +121,7 @@ void threadedDataPrinting(int serverSocketFD) {
 				if (amountReceived > 0) {
 					buffer[amountReceived] = 0;
 					printf("Response is %s\n", buffer);
+					bio_read_4k();
 					broadcastIncomingMessage(buffer, i);
 				} else if (amountReceived <= 0) {
 					close(i);
