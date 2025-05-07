@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "blocking_io.h"
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdbool.h>
@@ -129,6 +130,8 @@ void *receiveAndPrintIncomingData(void *arg) {
 	while (true) {
 		ssize_t amountReceived =
 			recv(clientSocket->acceptedSocketFD, buffer, 1024, 0);
+
+		// bio_read_4k();
 
 		if (amountReceived > 0) {
 			buffer[amountReceived] = 0;

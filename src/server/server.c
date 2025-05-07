@@ -1,3 +1,4 @@
+#include "../../include/blocking_io.h"
 #include "../../include/utils.h"
 #include <netinet/in.h>
 #include <stdbool.h>
@@ -17,6 +18,11 @@ int main() {
 	if (result == 0) {
 		printf("Socket was bound successfully");
 	}
+
+	// if (bio_init("test_blob.bin", 8 * 1024 * 1024) != 0) {
+	// 	perror("bio_init");
+	// 	exit(EXIT_FAILURE);
+	// }
 
 	int listenResult = listen(
 		serverSocketFD, 10); // Queues all the connections that are coming to
