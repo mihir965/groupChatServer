@@ -1,5 +1,6 @@
 #include "utils.h"
 #include "blocking_io.h"
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdbool.h>
@@ -74,6 +75,10 @@ struct AcceptedSocket *acceptIncomingConnection(int serverSocketFD) {
 	socklen_t clientAddressLen = sizeof(clientAddress);
 	int clientSocketFD = accept(
 		serverSocketFD, (struct sockaddr *)&clientAddress, &clientAddressLen);
+	if (clientSocketFD >= 0) {
+		int flags = fcntl(clientSocketFD, F_GETFL, 0);
+		fcntl(clientSocketFD, F_SETFL, flags | O_NONBLOCK);
+	}
 	struct AcceptedSocket *acceptedSocket =
 		malloc(sizeof(struct AcceptedSocket));
 	acceptedSocket->address = clientAddress;
