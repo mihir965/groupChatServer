@@ -1,7 +1,5 @@
 #include "utils.h"
 #include "blocking_io.h"
-#include <errno.h>
-#include <fcntl.h>
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdbool.h>
@@ -47,9 +45,6 @@ void jq_enqueue(JobQueue *q, Job *j) {
 
 		// Signalling that the queue is not empty
 		pthread_cond_signal(&q->not_empty);
-	} else {
-		free(j->msg);
-		free(j);
 	}
 
 	pthread_mutex_unlock(&q->lock);
@@ -152,10 +147,6 @@ struct AcceptedSocket *acceptIncomingConnection(int serverSocketFD) {
 	socklen_t clientAddressLen = sizeof(clientAddress);
 	int clientSocketFD = accept(
 		serverSocketFD, (struct sockaddr *)&clientAddress, &clientAddressLen);
-	if (clientSocketFD >= 0) {
-		int flags = fcntl(clientSocketFD, F_GETFL, 0);
-		fcntl(clientSocketFD, F_SETFL, flags | O_NONBLOCK);
-	}
 	struct AcceptedSocket *acceptedSocket =
 		malloc(sizeof(struct AcceptedSocket));
 	acceptedSocket->address = clientAddress;
@@ -186,25 +177,8 @@ static void *worker_fn(void *arg) {
 		struct AcceptedSocketNode *c = head;
 		while (c) {
 			int dst = c->data->acceptedSocketFD;
-			if (dst != job->sender_fd) {
-				const char *p = job->msg;
-				size_t n = job->len;
-
-				while (n > 0) {
-					ssize_t s = send(dst, p, n, 0);
-					if (s > 0) {
-						p += s;
-						n -= s;
-					} else if (s == -1 &&
-							   (errno == EAGAIN || errno == EWOULDBLOCK)) {
-						break;
-					} else {
-						close(dst);
-						head = removeClient(head, dst);
-						break;
-					}
-				}
-			}
+			if (dst != job->sender_fd)
+				send(dst, job->msg, job->len, 0);
 			c = c->next;
 		}
 		pthread_mutex_unlock(&clients_lock);
@@ -231,8 +205,8 @@ static void join_workers(void) {
 
 void threadedDataPrinting(int serverSocketFD) {
 
-	JobQueue *q = jq_init(1024); // capacity 1024
-	spawn_workers(q, 4);		 // 4 worker threads
+	JobQueue *q = jq_init(256); // capacity 256
+	spawn_workers(q, 4);		// 4 worker threads
 
 	fd_set current_sockets, ready_sockets;
 	FD_ZERO(&current_sockets);
