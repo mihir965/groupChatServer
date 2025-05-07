@@ -1,6 +1,7 @@
 #ifndef _UTILS_
 #define _UTILS_
 
+#include "blocking_io.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <pthread.h>

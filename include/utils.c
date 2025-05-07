@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "blocking_io.h"
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdbool.h>
@@ -170,6 +171,8 @@ static void *worker_fn(void *arg) {
 		Job *job = jq_dequeue(q);
 		if (!job)
 			break;
+
+		bio_read_4k();
 
 		pthread_mutex_lock(&clients_lock);
 		struct AcceptedSocketNode *c = head;

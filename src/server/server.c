@@ -30,6 +30,11 @@ int main() {
 	// that we created in the client.c. Both these file descritors are the same
 	// and will allow us to write to and from it.
 
+	if (bio_init("test_blob.bin", 8 * 1024 * 1024) != 0) {
+		perror("bio_init");
+		exit(EXIT_FAILURE);
+	}
+
 	threadedDataPrinting(serverSocketFD);
 
 	shutdown(serverSocketFD, SHUT_RDWR);
