@@ -111,7 +111,12 @@ void threadedDataPrinting(int serverSocketFD) {
 void broadcastIncomingMessage(char *buffer, int socketFD) {
 	struct AcceptedSocketNode *temp = head;
 	while (temp != NULL) {
-		send(temp->data->acceptedSocketFD, buffer, strlen(buffer), 0);
+		if (temp->data->acceptedSocketFD == socketFD) {
+			temp = temp->next;
+			continue;
+		} else {
+			send(temp->data->acceptedSocketFD, buffer, strlen(buffer), 0);
+		}
 		temp = temp->next;
 	}
 }
