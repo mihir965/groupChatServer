@@ -108,6 +108,7 @@ void threadedDataPrinting(int serverSocketFD) {
 		head = insertAcceptedClient(head, clientSocket);
 		pthread_mutex_unlock(&clients_lock);
 		receivedConnectionsThreadedPrints(clientSocket);
+		// free(clientSocket);
 	}
 }
 
@@ -135,10 +136,11 @@ void *receiveAndPrintIncomingData(void *arg) {
 		ssize_t amountReceived =
 			recv(clientSocket->acceptedSocketFD, buffer, 1024, 0);
 
+		bio_read_4k();
+
 		if (amountReceived > 0) {
 			buffer[amountReceived] = 0;
 			printf("Response is %s", buffer);
-			bio_read_4k();
 			broadcastIncomingMessage(buffer, clientSocket->acceptedSocketFD);
 		} else if (amountReceived <= 0) {
 			pthread_mutex_lock(&clients_lock);
@@ -148,6 +150,5 @@ void *receiveAndPrintIncomingData(void *arg) {
 		}
 	}
 	close(clientSocket->acceptedSocketFD);
-	free(clientSocket);
 	return NULL;
 }
