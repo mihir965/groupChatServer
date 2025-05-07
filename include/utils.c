@@ -88,6 +88,7 @@ struct AcceptedSocket *acceptIncomingConnection(int serverSocketFD) {
 
 struct AcceptedSocketNode *head = NULL;
 unsigned socket_size = sizeof(struct AcceptedSocket);
+pthread_mutex_t clients_lock = PTHREAD_MUTEX_INITIALIZER;
 
 void threadedDataPrinting(int serverSocketFD) {
 	fd_set current_sockets, ready_sockets;
@@ -112,7 +113,9 @@ void threadedDataPrinting(int serverSocketFD) {
 					FD_SET(clientSocket->acceptedSocketFD, &current_sockets);
 					if (clientSocket->acceptedSocketFD > maxfd)
 						maxfd = clientSocket->acceptedSocketFD;
+					pthread_mutex_lock(&clients_lock);
 					head = insertAcceptedClient(head, clientSocket);
+					pthread_mutex_unlock(&clients_lock);
 				}
 				free(clientSocket);
 			} else {
@@ -120,13 +123,15 @@ void threadedDataPrinting(int serverSocketFD) {
 				ssize_t amountReceived = recv(i, buffer, sizeof(buffer) - 1, 0);
 				if (amountReceived > 0) {
 					buffer[amountReceived] = 0;
-					printf("Response is %s\n", buffer);
+					// printf("Response is %s\n", buffer);
 					bio_read_4k();
 					broadcastIncomingMessage(buffer, i);
 				} else if (amountReceived <= 0) {
 					close(i);
 					FD_CLR(i, &current_sockets);
+					pthread_mutex_lock(&clients_lock);
 					head = removeClient(head, i);
+					pthread_mutex_unlock(&clients_lock);
 				}
 			}
 		}
@@ -134,6 +139,7 @@ void threadedDataPrinting(int serverSocketFD) {
 }
 
 void broadcastIncomingMessage(char *buffer, int socketFD) {
+	pthread_mutex_lock(&clients_lock);
 	struct AcceptedSocketNode *temp = head;
 	while (temp != NULL) {
 		if (temp->data->acceptedSocketFD == socketFD) {
@@ -144,4 +150,5 @@ void broadcastIncomingMessage(char *buffer, int socketFD) {
 		}
 		temp = temp->next;
 	}
+	pthread_mutex_unlock(&clients_lock);
 }
