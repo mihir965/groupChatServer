@@ -14,6 +14,10 @@ struct AcceptedSocketNode *insertAcceptedClient(struct AcceptedSocketNode *head,
 	struct AcceptedSocketNode *newClient =
 		(struct AcceptedSocketNode *)malloc(sizeof(struct AcceptedSocketNode));
 
+	if (!newClient) {
+		return head;
+	}
+
 	newClient->data = malloc(sizeof(struct AcceptedSocket));
 	newClient->next = head;
 
@@ -77,7 +81,7 @@ struct AcceptedSocket *acceptIncomingConnection(int serverSocketFD) {
 		malloc(sizeof(struct AcceptedSocket));
 	acceptedSocket->address = clientAddress;
 	acceptedSocket->acceptedSocketFD = clientSocketFD;
-	acceptedSocket->connectionAcceptedFully = clientSocketFD > 0;
+	acceptedSocket->connectionAcceptedFully = (clientSocketFD >= 0);
 	if (!acceptedSocket->connectionAcceptedFully) {
 		acceptedSocket->error = clientSocketFD;
 	}
@@ -108,7 +112,6 @@ void threadedDataPrinting(int serverSocketFD) {
 		head = insertAcceptedClient(head, clientSocket);
 		pthread_mutex_unlock(&clients_lock);
 		receivedConnectionsThreadedPrints(clientSocket);
-		// free(clientSocket);
 	}
 }
 
@@ -130,7 +133,7 @@ void broadcastIncomingMessage(char *buffer, int socketFD) {
 void *receiveAndPrintIncomingData(void *arg) {
 	struct AcceptedSocket *clientSocket = (struct AcceptedSocket *)arg;
 
-	char buffer[1024];
+	char buffer[1025];
 
 	while (true) {
 		ssize_t amountReceived =
