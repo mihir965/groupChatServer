@@ -18,11 +18,8 @@ struct AcceptedSocketNode *insertAcceptedClient(struct AcceptedSocketNode *head,
 		return head;
 	}
 
-	newClient->data = malloc(sizeof(struct AcceptedSocket));
+	newClient->data = client;
 	newClient->next = head;
-
-	memcpy(newClient->data, client, sizeof(struct AcceptedSocket));
-
 	return newClient;
 }
 
