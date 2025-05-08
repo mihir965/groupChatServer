@@ -6,9 +6,9 @@ This repository contains multiple implementations of a concurrent chat server in
 
 | Branch Name       | Implementation Type         |
 |-------------------|-----------------------------|
-| `version/baseChat`| Thread-per-client           |
-| `version/01`      | Event-driven using `select` |
-| `version/02`      | Asymmetric multi-process event-driven (thread pool) |
+| `multiThreaded`| Thread-per-client           |
+| `select`      | Event-driven using `select` |
+| `pool`      | Asymmetric multi-process event-driven (thread pool) |
 
 ## Common Structure
 
@@ -26,3 +26,4 @@ Use the following `clang` command to compile:
 
 ```bash
 clang server.c utils.c blocking_io.c -o server -lpthread
+
